@@ -1,0 +1,4 @@
+.DS_Store
+*.DS_Store
+.ycm_extra_config.py
+*.swp
