@@ -21,26 +21,45 @@ public:
 	//ugly malloc call cuz we're doing manual memory management here. This default base ctor should really
 	//probably never be called though, so it doesn't matter so much anyway
 	constexpr petsc_smart_ptr_base() noexcept 
-									: ptr(malloc(sizeof(T))), m_ierr(0) {};
+									: m_ptr(malloc(sizeof(T))), m_ierr(0) 
+	{
+		PetscFunctionBeginHot;
+		//check that malloc worked (m_ptr is not null)
+		if(not m_ptr)
+		{
+			m_ierr = PETSC_ERR_MEM;
+		}
+		
+		CHKERRQ(m_ierr);
+
+		PetscFunctionReturnVoid();
+	};
 
 	constexpr petsc_smart_ptr_base(const T& ptr) noexcept 
 												: m_ptr(std::addressof(ptr))
 	{
+		PetscFunctionBeginHot;
 		//TODO: maybe some conditions to see if things look okay? (not sure exactly what that means yet)
 		m_ierr = 0;
 		CHKERRQ(m_ierr);
+
+		PetscFunctionReturnVoid();
 	};
 
 	constexpr petsc_smart_ptr_base(const T* ptr) noexcept
 												: m_ptr(ptr)
 	{
+		PetscFunctionBeginHot;
 		//TODO: same as above
 		m_ierr = 0;
 		CHKERRQ(ierr);
+
+		PetscFunctionReturnVoid();
 	};
 
 	virtual ~petsc_smart_ptr_base()
 	{
+		PetscFunctionBegin;
 		//anybody else have a problem and trying to tell us? if so, we can't delete. This shouldn't 
 		//affect performance meaningfully, since generally, destructors for PETSc objects will be called at
 		//the end of a (segment of a) computation, when new data is relatively more likely to be loaded anyway
@@ -60,7 +79,10 @@ public:
 		if(m_ptr){
 			m_ierr = PETSC_ERR_WRONGSTATE;
 		}
+		//make sure we don't need to crash (again)
 		CHKERRQ(m_ierr);
+
+		PetscFunctionReturnVoid();
 	}
 		
 		
@@ -69,9 +91,17 @@ public:
 	using type = T;
 	
 	//overload to send m_ierr to whichever process requests it
-	constexpr PetscError ierr() const noexcept
+	constexpr void request_ierr(PetscError& ierr) const noexcept
 	{
-		return m_ierr;
+		PetscFunctionBegin;
+		ierr = m_ierr;
+		PetscFunctionReturnVoid();
+	}
+
+	constexpr PetscError request_ierr() const noexcept
+	{
+		PetscFunctionBegin;
+		PetscFunctionReturn(m_ierr);
 	}
 
 	/* this means that if you have some PETSc object wrapped in a petsc_smart_ptr<SomePetscType>,
@@ -92,17 +122,45 @@ public:
 	 *
 	 * auto thing = CStyleObj->attribute;
 	 */
-	T* operator->() const noexcept
+	T* operator->() noexcept
 	{
+		PetscFunctionBeginHot;
 		if(m_ptr == NULL)
 		{
 			//NOTE: maybe add a CHKERRQ here? seems more like something the user should have control over though,
 			// as much as one has any control once one dereferences a null pointer...
-			ierr = PETSC_ERR_POINTER;
+			m_ierr = PETSC_ERR_POINTER;
 		}
 
-		return m_ptr;
+		PetscFunctionReturn(m_ptr);
 	}
+
+	const T* operator->() const noexcept
+	{
+		PetscFunctionBeginHot;
+		if(m_ptr == NULL)
+		{
+			m_ierr = PETSC_ERR_POINTER;
+		}
+
+		PetscFunctionReturn(m_ptr);
+	}
+			
+
+	T& operator*() noexcept
+	{
+		PetscFunctionBeginHot;
+		PetscFunctionReturn(*m_ptr);
+	}
+
+	const T& operator() const noexcept
+	{
+		PetscFunctionBeginHot;
+		PetscFunctionReturn(*m_ptr);
+	}
+
+	
+
 
 protected:
 
@@ -121,9 +179,37 @@ class petsc_smart_ptr : private petsc_smart_ptr_base<T>
 
 public:
 
-	constexpr petsc_smart_ptr() : m
+	constexpr petsc_smart_ptr() : petsc_smart_ptr_base() 
+	{
+		PetscFunctionBeginHot;
+		m_ierr = PETSC_ERR_SUP;
+		CHKERRQ(m_ierr);
+		PetscFunctionReturnVoid();
+	};
+
+	constexpr petsc_smart_ptr(const T& ptr) : petsc_smart_ptr_base(ptr) 
+	{
+		PetscFunctionBeginHot;
+		m_ierr = PETSC_ERR_SUP;
+		CHKERRQ(m_ierr);
+		PetscFunctionReturnVoid();
+	};
+
+	constexpr petsc_smart_ptr(const T* ptr) : petsc_smart_ptr(ptr) 
+	{
+		PetscFunctionBeginHot;
+		m_ierr = PETSC_ERR_SUP;
+		CHKERRQ(m_ierr);
+		PetscFunctionReturnVoid();
+	};
 	
 
-
+	~petsc_smart_ptr()
+	{
+		PetscFunctionBeginHot;
+		//nothing to do here, base dtor takes care of it
+		PetscFunctionReturnVoid();
+	}
+};
 
 #endif //PETSC_SMART_PTR_HPP
